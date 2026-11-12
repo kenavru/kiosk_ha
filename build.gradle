@@ -1,0 +1,19 @@
+// Old-school Gradle build that still produces APKs for Android 2.x devices.
+// Requires Gradle 6.5 + Android Gradle Plugin 4.1.3 (last versions that
+// comfortably support minSdk 8 / targetSdk 10).
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:4.1.3'
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}

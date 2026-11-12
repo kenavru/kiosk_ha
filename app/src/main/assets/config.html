@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Kiosk - dashboard tiles</title>
+<style>
+body { background:#1b1b1b; color:#e6e6e6; font-family:Segoe UI,Arial,sans-serif; margin:0; }
+header { position:sticky; top:0; background:#000; padding:12px 18px;
+         display:flex; align-items:center; gap:14px; border-bottom:2px solid #555; }
+h1 { font-size:20px; font-weight:300; margin:0; letter-spacing:2px; }
+#filter { flex:1; background:#2a2a2a; border:1px solid #555; color:#fff;
+          padding:8px; font-size:14px; }
+button { background:#0078d7; color:#fff; border:0; padding:10px 18px;
+         font-size:14px; cursor:pointer; }
+button.sec { background:#333; }
+button:hover { opacity:.85; }
+#status { font-size:13px; color:#9fdc6f; }
+main { padding:14px 18px; }
+h2 { font-size:14px; font-weight:600; color:#7f7f7f; margin:18px 0 4px; }
+label { display:inline-block; width:340px; padding:4px 6px; font-size:13px;
+        white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+label:hover { background:#2a2a2a; }
+input[type=checkbox] { margin-right:6px; }
+.id { color:#666; font-size:11px; }
+#count { color:#c0c0c0; font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>KIOSK</h1>
+  <span id="count"></span>
+  <input type="text" id="filter" placeholder="filter, e.g. weather or living">
+  <button class="sec" onclick="pick(false)">None</button>
+  <button onclick="save()">Save to phone</button>
+  <span id="status"></span>
+</header>
+<main id="list">loading entities from HA via the phone...</main>
+<script>
+var all = [];
+
+function xhr(method, url, body, cb) {
+  var x = new XMLHttpRequest();
+  x.open(method, url, true);
+  x.onreadystatechange = function () {
+    if (x.readyState == 4) cb(x.status >= 400 ? x.responseText : null, x.responseText);
+  };
+  if (method == "POST") x.setRequestHeader("Content-Type", "application/json");
+  x.send(body || null);
+}
+
+function load() {
+  xhr("GET", "/entities", null, function (err, txt) {
+    if (err) {
+      document.getElementById("list").textContent =
+        "phone could not reach HA: " + txt;
+      return;
+    }
+    var d = JSON.parse(txt);
+    all = d.entities;
+    var sel = {};
+    for (var i = 0; i < d.selected.length; i++) sel[d.selected[i]] = 1;
+    all.sort(function (a, b) { return a.id < b.id ? -1 : 1; });
+    var html = "", dom = "";
+    for (var i = 0; i < all.length; i++) {
+      var e = all[i], d2 = e.id.split(".")[0];
+      if (d2 != dom) { dom = d2; html += "<h2>" + dom + "</h2>"; }
+      html += '<label data-id="' + e.id + '" data-name="' + esc(e.name) + '">'
+            + '<input type="checkbox"' + (sel[e.id] ? " checked" : "") + ">"
+            + esc(e.name || e.id) + ' <span class="id">' + e.id
+            + (e.state ? " = " + esc(e.state) : "") + "</span></label>";
+    }
+    document.getElementById("list").innerHTML = html;
+    var boxes = document.getElementsByTagName("input");
+    for (var j = 0; j < boxes.length; j++) boxes[j].onchange = count;
+    count();
+  });
+}
+
+function esc(s) {
+  return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+}
+
+function count() {
+  document.getElementById("count").textContent =
+    document.getElementsByTagName("input").length + " entities, " +
+    document.querySelectorAll("input:checked").length + " on the dashboard";
+}
+
+function visibleLabels() {
+  var out = [], ls = document.getElementsByTagName("label");
+  for (var i = 0; i < ls.length; i++)
+    if (ls[i].style.display != "none") out.push(ls[i]);
+  return out;
+}
+
+function pick(on) {
+  var vis = visibleLabels();
+  for (var i = 0; i < vis.length; i++) vis[i].getElementsByTagName("input")[0].checked = on;
+  count();
+}
+
+document.getElementById("filter").oninput = function () {
+  var f = this.value.toLowerCase();
+  var ls = document.getElementsByTagName("label");
+  for (var i = 0; i < ls.length; i++) {
+    var l = ls[i];
+    var m = (l.getAttribute("data-id") + " " + l.getAttribute("data-name"))
+              .toLowerCase().indexOf(f) >= 0;
+    l.style.display = m ? "" : "none";
+  }
+  var hs = document.getElementsByTagName("h2");
+  for (var j = 0; j < hs.length; j++) {
+    var show = false, n = hs[j].nextSibling;
+    while (n && n.tagName == "LABEL") {
+      if (n.style.display != "none") { show = true; break; }
+      n = n.nextSibling;
+    }
+    hs[j].style.display = show ? "" : "none";
+  }
+};
+
+function save() {
+  var ids = [], c = document.querySelectorAll("input:checked");
+  for (var i = 0; i < c.length; i++) ids.push(c[i].parentNode.getAttribute("data-id"));
+  xhr("POST", "/save", JSON.stringify({ entities: ids }), function (err, txt) {
+    var s = document.getElementById("status");
+    if (err) { s.style.color = "#e66"; s.textContent = "save failed: " + txt; }
+    else     { s.style.color = "#9fdc6f"; s.textContent = "saved - dashboard updates within seconds"; }
+  });
+}
+
+load();
+</script>
+</body>
+</html>

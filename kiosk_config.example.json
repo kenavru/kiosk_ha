@@ -1,0 +1,14 @@
+{
+  "url": "http://YOUR-HA-HOST:8123",
+  "token": "***",
+  "interval": 10,
+  "entities": [
+    "sensor.total_power",
+    "sensor.some_temperature",
+    "switch.some_switch"
+  ],
+  "listen": true,
+  "listen_port": 8090,
+  "tts_entity": "tts.google_translate_pl_pl",
+  "media_player": "media_player.kiosk"
+}

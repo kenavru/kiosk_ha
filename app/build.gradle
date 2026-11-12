@@ -1,0 +1,43 @@
+apply plugin: 'com.android.application'
+
+android {
+    compileSdkVersion 29
+    buildToolsVersion "29.0.3"
+
+    defaultConfig {
+        applicationId "com.example.kiosk"
+        minSdkVersion 8     // Android 2.2+ (covers the 2.3/2.4 era)
+        targetSdkVersion 10 // behave like a Gingerbread app
+        versionCode 1
+        versionName "1.0"
+    }
+
+    signingConfigs {
+        // Fixed key checked into the project: keeps the signing
+        // certificate stable across rebuilds, so `adb install -r`
+        // upgrades work forever (no INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES).
+        debug {
+            storeFile file("../debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            minifyEnabled false
+        }
+    }
+
+    // Android < 4.3 ignores v2 signatures; keep v1 (SHA1) only.
+    // (AGP 4.1 DSL: v2SigningEnabled moved under signingConfigs)
+
+    // Don't fail the build over "modern lint" complaints about old SDKs.
+    lintOptions {
+        abortOnError false
+    }
+}

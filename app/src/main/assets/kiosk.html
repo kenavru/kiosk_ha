@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Kiosk</title>
+<style>
+  html, body { height: 100%; margin: 0; background: #000; color: #fff;
+               font-family: sans-serif; -webkit-text-size-adjust: none; }
+  ::-webkit-scrollbar { width: 0; height: 0; display: none; }
+  #hdr { padding: 10px 12px 6px 12px; }
+  #title { font-size: 30px; font-weight: 200; }          /* thin, WP7-ish */
+  #status { font-size: 13px; color: #a0a0a0; margin-left: 4px; }
+  .st-on  { color: #60A917; } .st-off { color: #E51400; } .st-na { color: #666; }
+  #grid { padding: 0 6px; }
+  .tile { float: left; width: 136px; height: 84px; margin: 6px; padding: 8px;
+          background: #1BA1E2; color: #fff; overflow: hidden; }
+  .tile.wide { width: 296px; }
+  .tile .val { font-size: 30px; font-weight: bold; line-height: 34px;
+               white-space: nowrap; overflow: hidden; }
+  .tile .lbl { font-size: 12px; margin-top: 2px; white-space: nowrap;
+               overflow: hidden; color: rgba(255,255,255,0.85); }
+  .tile.tap { cursor: pointer; }
+  .tile.on  { background: #60A917; }
+  .tile.off { background: #4a4a4a; }
+  #ftr { clear: both; padding: 10px 12px; font-size: 12px; color: #777; }
+</style>
+</head>
+<body>
+<div id="hdr"><span id="title">kiosk</span><span id="status" class="st-na">&hellip;</span></div>
+<div id="grid"></div>
+<div id="ftr"><span id="clock"></span></div>
+<script>
+var TOGGLEABLE = ["switch.", "light.", "fan.", "input_boolean."];
+var ACTIONS = { "script": "turn_on", "button": "press" };  /* tap = fire once */
+
+function actionService(id) {
+  return ACTIONS[id.substring(0, id.indexOf("."))] || null;
+}
+
+/* WP7 accent palette, assigned by subject */
+function tileStyle(id, state) {
+  if (isToggle(id)) return "";                   /* handled by .on/.off */
+  if (id.indexOf("ups") !== -1)     return "background:#AA50CB;";
+  if (id.indexOf("power") !== -1 || id.indexOf("energy") !== -1 ||
+      id.indexOf("voltage") !== -1) return "background:#F09609;";
+  if (id.indexOf("temp") !== -1 || id.indexOf("humidity") !== -1)
+      return "background:#00ABA9;";
+  return "background:#1BA1E2;";
+}
+function isToggle(id) {
+  for (var i = 0; i < TOGGLEABLE.length; i++) {
+    if (id.indexOf(TOGGLEABLE[i]) === 0) return true;
+  }
+  return false;
+}
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+                  .replace(/>/g, "&gt;");
+}
+/* long floats like 19.7925567626953 become 19.8 */
+function fmt(v) {
+  var n = parseFloat(v);
+  if (!isNaN(n) && String(v).indexOf(".") !== -1) {
+    return n.toFixed(Math.abs(n) < 100 ? 1 : 0);
+  }
+  return String(v);
+}
+function setStatus(cls, txt) {
+  var e = document.getElementById("status");
+  e.className = cls;
+  e.innerHTML = txt;
+}
+
+var HA = {
+  last: [],
+
+  update: function (states) {
+    setStatus("st-on", "online");
+    HA.last = states;
+    HA.render();
+  },
+
+  /* single-entity update (tap burst) - snaps a tile to reality fast */
+  patch: function (s) {
+    for (var i = 0; i < HA.last.length; i++) {
+      if (HA.last[i].entity_id === s.entity_id) { HA.last[i] = s; break; }
+      if (i === HA.last.length - 1) HA.last.push(s);
+    }
+    HA.render();
+  },
+
+  render: function () {
+    var h = "";
+    for (var i = 0; i < HA.last.length; i++) {
+      var s = HA.last[i];
+      var id = s.entity_id, name = s.name || id;
+      var tap = isToggle(id);
+      var act = tap ? null : actionService(id);
+      var cls = "tile" + (id.indexOf("total_power") !== -1 ? " wide" : "")
+              + (tap ? " tap " + (s.state === "on" ? "on" : "off")
+                     : act ? " tap" : "");
+      var val, lbl;
+      if (tap) {
+        val = (s.state === "on") ? "ON" : "OFF";
+        lbl = name;
+      } else if (act) {
+        val = "GO";
+        lbl = name;
+      } else {
+        val = fmt(s.state) + (s.unit ? " " + s.unit : "");
+        lbl = name;
+      }
+      h += '<div class="' + cls + '" style="' + tileStyle(id, s.state) + '"'
+         + ((tap || act) ? ' onclick="HA.toggle(\'' + id + "'," + (s.state === "on" ? "true" : "false") + ')"' : "")
+         + '><div class="val">' + esc(val) + '</div><div class="lbl">'
+         + esc(lbl) + '</div></div>';
+    }
+    document.getElementById("grid").innerHTML = h;
+  },
+
+  toggle: function (id, currentlyOn) {
+    if (typeof kiosk === "undefined") return;
+    var dot = id.indexOf(".");
+    var domain = id.substring(0, dot);
+    var act = actionService(id);
+    if (act) { kiosk.send(domain + "/" + act, id); return; }
+    kiosk.send(domain + "/" + (currentlyOn ? "turn_off" : "turn_on"), id);
+  },
+
+  offline: function () { setStatus("st-off", "no connection"); },
+  noConfig:  function () { setStatus("st-na", "no config"); }
+};
+
+var months = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+function pad(n) { return n < 10 ? "0" + n : "" + n; }
+function tick() {
+  var d = new Date();
+  document.getElementById("clock").innerHTML =
+      pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds()) +
+      "  &nbsp;  " + d.getDate() + " " + months[d.getMonth()];
+}
+tick();
+setInterval(tick, 1000);
+</script>
+</body>
+</html>
